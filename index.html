@@ -765,8 +765,9 @@ function updateThrownMoon(dt_real,sim_dt){
     if(r>0.1) updateReadout(velMag,localPos);
     readoutSprite.position.set(localPos.x,localPos.y+1.2,localPos.z);
 
-    // Live orbit preview
-    if(velMag>0.01&&r>0.5){
+    // Live orbit preview — recompute every 3rd frame (still looks smooth, saves ~270 verlet steps/frame)
+    previewFrameCount++;
+    if(velMag>0.01&&r>0.5&&previewFrameCount%3===0){
       const pts=computeOrbitPreview(localPos.clone(),tmState.vel.clone(),GM);
       const n=Math.min(pts.length,MAX_PREVIEW_PTS);
       for(let i=0;i<n;i++){previewPositions[i*3]=pts[i].x;previewPositions[i*3+1]=pts[i].y;previewPositions[i*3+2]=pts[i].z;}
@@ -862,14 +863,11 @@ function makeMoonSprite(name,colorHex){
   ctx.font='bold 18px "Share Tech Mono",monospace';
   ctx.textAlign='left';ctx.textBaseline='middle';
   ctx.fillText(name,12,H/2);
-  const tex=new THREE.CanvasTexture(cv);
-  // depthTest:true so planet occludes them; we also do per-frame raycast check
-  const mat=new THREE.SpriteMaterial({map:tex,depthTest:true,transparent:true,opacity:0.92});
+  // depthTest:false — we handle planet occlusion via per-frame raycast opacity.
+  // Setting true causes the moon sphere itself to occlude the label.
+  const mat=new THREE.SpriteMaterial({map:tex,depthTest:false,transparent:true,opacity:0.92});
   const sprite=new THREE.Sprite(mat);
-  // Scale: want label ~0.5 world-units wide in orrery space
-  const aspect=W/H;
-  sprite.scale.set(0.55*aspect/H*H, 0.55, 1); // keep consistent height
-  sprite.scale.set(0.6,0.6*(H/W),1);           // simpler: fix height, derive width
+  sprite.scale.set(0.85, 0.85*(H/W), 1);
   sprite.visible=false;
   return sprite;
 }
@@ -944,7 +942,8 @@ function updateMoonPositions(){
   moonSprites.forEach((sprite,i)=>{
     if(!moonMeshes[i])return;
     const mp=moonMeshes[i].position,dR=SYSTEMS[currentSys].moons[i].dispR;
-    sprite.position.set(mp.x,mp.y+dR+0.55,mp.z+0.3);
+    // Position directly above the moon center; z offset pushes toward camera
+    sprite.position.set(mp.x, mp.y+dR+0.32, mp.z+0.35);
   });
 }
 
@@ -1133,6 +1132,7 @@ function billboardVRPanel(){
 // ═══════════════════════════════════════════════════════════════════════
 function easeInOut(t){return t<0.5?2*t*t:-1+(4-2*t)*t;}
 let lastPanelRedraw=0;
+let previewFrameCount=0;
 
 function animate(ts){
   const dt_real=(lastTs!==null)?Math.min((ts-lastTs)/1000,0.1):0;lastTs=ts;
@@ -1169,9 +1169,8 @@ function animate(ts){
     updateControllerHighlight();
     billboardVRPanel();
     updateSpriteOcclusion();
-    // Redraw panel: every frame when moon held (speed changes fast), else 10fps
-    const panelInterval = (tmState&&tmState.held) ? 0 : 100;
-    if(ts-lastPanelRedraw > panelInterval){renderVRPanel();lastPanelRedraw=ts;}
+    // Panel redraws: 30fps max always. The small readout sprite handles fast updates.
+    if(ts-lastPanelRedraw > 33){renderVRPanel();lastPanelRedraw=ts;}
   }
 
   renderer.render(scene,camera);
