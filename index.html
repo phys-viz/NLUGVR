@@ -144,7 +144,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:12px; h
 //  VR CONSTANTS
 // ═══════════════════════════════════════════════════════════════════════
 const VR_SCALE = 1.5 / 24;
-const VR_POS   = new THREE.Vector3(0, 1.1, -1.2);
+const VR_POS   = new THREE.Vector3(0, 1.42, -1.2);
 let vrActive   = false;
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -580,6 +580,12 @@ const PANEL_WORLD_POS = new THREE.Vector3(
 );
 vrPanelGroup.position.copy(PANEL_WORLD_POS);
 
+// ── Panel drag state ──
+let panelDragging    = false;
+let panelDragCtrlIdx = -1;
+const _panelDragOffset = new THREE.Vector3();
+const _ctrlWorldPos2   = new THREE.Vector3();
+
 // ═══════════════════════════════════════════════════════════════════════
 //  XR CONTROLLERS
 // ═══════════════════════════════════════════════════════════════════════
@@ -593,40 +599,66 @@ function setupControllers() {
       new THREE.LineBasicMaterial({color:0x4fc3f7,transparent:true,opacity:0.45})
     );
     ray.visible=false; ctrl.add(ray); controllerLines.push(ray); controllerRayMats.push(ray.material);
-    ctrl.addEventListener('selectstart',onControllerSelect.bind(null,i));
-    ctrl.addEventListener('connected',  ()=>{if(vrActive)ray.visible=true;});
+    ctrl.addEventListener('selectstart', onSelectStart.bind(null,i));
+    ctrl.addEventListener('selectend',   onSelectEnd.bind(null,i));
+    ctrl.addEventListener('connected',   ()=>{if(vrActive)ray.visible=true;});
     ctrl.addEventListener('disconnected',()=>{ray.visible=false;});
   }
 }
 
-const _rcVR=new THREE.Raycaster(), _cDir=new THREE.Vector3(), _cPos=new THREE.Vector3();
-let hoveredHitbox = null;
-
-function onControllerSelect(idx) {
-  if(!vrActive)return;
+function onSelectStart(idx) {
+  if(!vrActive) return;
   const ctrl=controllers[idx];
   ctrl.getWorldPosition(_cPos); ctrl.getWorldDirection(_cDir); _cDir.negate();
   _rcVR.set(_cPos,_cDir);
-  const hits=_rcVR.intersectObjects(vrHitboxes);
-  if(hits.length>0){
-    const btnId=hits[0].object.userData.btnId;
-    const btn=VR_BUTTONS.find(b=>b.id===btnId);
-    if(btn) btn.action();
+
+  // Check panel background first — if hit, start drag
+  const panelHit = _rcVR.intersectObject(vrPanelMesh);
+  if(panelHit.length > 0){
+    // Check if we're NOT over a button — button presses take priority
+    const btnHit = _rcVR.intersectObjects(vrHitboxes);
+    if(btnHit.length > 0){
+      // It's a button press, not a drag
+      const btn=VR_BUTTONS.find(b=>b.id===btnHit[0].object.userData.btnId);
+      if(btn) btn.action();
+      return;
+    }
+    // Start dragging the panel
+    panelDragging    = true;
+    panelDragCtrlIdx = idx;
+    ctrl.getWorldPosition(_ctrlWorldPos2);
+    _panelDragOffset.copy(vrPanelGroup.position).sub(_ctrlWorldPos2);
+    controllerRayMats[idx].color.setHex(0xffd54f); // gold ray = dragging
+    return;
   }
 }
 
+function onSelectEnd(idx) {
+  if(panelDragging && panelDragCtrlIdx === idx){
+    panelDragging    = false;
+    panelDragCtrlIdx = -1;
+    controllerRayMats[idx].color.setHex(0x4fc3f7); // restore cyan
+  }
+}
+
+const _rcVR=new THREE.Raycaster(), _cDir=new THREE.Vector3(), _cPos=new THREE.Vector3();
+
 function updateControllerHighlight(){
   if(!vrActive)return;
-  let anyHover=false;
+  // Update drag position
+  if(panelDragging && panelDragCtrlIdx >= 0){
+    controllers[panelDragCtrlIdx].getWorldPosition(_ctrlWorldPos2);
+    vrPanelGroup.position.copy(_ctrlWorldPos2).add(_panelDragOffset);
+  }
+  // Hover glow
   for(let i=0;i<controllers.length;i++){
+    if(panelDragging && i===panelDragCtrlIdx) continue;
     const ctrl=controllers[i];
     ctrl.getWorldPosition(_cPos); ctrl.getWorldDirection(_cDir); _cDir.negate();
     _rcVR.set(_cPos,_cDir);
     const hits=_rcVR.intersectObjects(vrHitboxes);
-    if(hits.length>0){ controllerRayMats[i].opacity=0.9; anyHover=true; }
-    else controllerRayMats[i].opacity=0.4;
+    controllerRayMats[i].opacity = hits.length>0 ? 0.9 : 0.4;
   }
-  _ = anyHover; // suppress unused warning
 }
 
 setupControllers();
