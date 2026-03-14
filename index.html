@@ -128,6 +128,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:12px; h
 const VR_SCALE = 1.5 / 24;
 const VR_POS   = new THREE.Vector3(0, 1.42, -1.2);
 let vrActive   = false;
+let showMoonLabels = true;  // VR label visibility toggle
+const _occRC   = new THREE.Raycaster(); // dedicated raycaster for occlusion checks
 
 // ═══════════════════════════════════════════════════════════════════════
 //  HELPERS
@@ -396,12 +398,12 @@ const previewLine=new THREE.Line(previewGeo,
 previewLine.renderOrder=5;previewLine.visible=false;
 orreryGroup.add(previewLine);
 
-// ── Thrown moon readout sprite ──
-const readoutCv=document.createElement('canvas');readoutCv.width=512;readoutCv.height=148;
+// ── Thrown moon readout sprite — speed + radius only, floats above moon ──
+const readoutCv=document.createElement('canvas');readoutCv.width=220;readoutCv.height=52;
 const readoutCtx=readoutCv.getContext('2d');
 const readoutTex=new THREE.CanvasTexture(readoutCv);
 const readoutSprite=new THREE.Sprite(new THREE.SpriteMaterial({map:readoutTex,depthTest:false,transparent:true}));
-readoutSprite.scale.set(3.8,1.1,1);
+readoutSprite.scale.set(1.4,0.33,1);
 readoutSprite.visible=false;
 orreryGroup.add(readoutSprite);
 
@@ -411,64 +413,33 @@ function updateReadout(speed_wu_day,pos){
   const vC=vCirc(r,GM);
   const vE=vC*Math.SQRT2;
   const spd_kms=wuDayToKmS(speed_wu_day,currentSys);
-  const vC_kms=wuDayToKmS(vC,currentSys);
-  const vE_kms=wuDayToKmS(vE,currentSys);
-  const ratio=speed_wu_day/vC;
-
-  // Color by ratio
-  let col,label;
-  if(ratio<0.5){col='#4488ff';label='SUBORBITAL';}
-  else if(ratio<0.9){col='#00ccff';label='ELLIPTICAL';}
-  else if(ratio<1.1){col='#00ff88';label='NEAR CIRCULAR ✓';}
-  else if(ratio<vE/vC){col='#ffcc00';label='ELLIPTICAL ORBIT';}
-  else{col='#ff4444';label='ESCAPE TRAJECTORY';}
-
-  const ctx=readoutCtx,W=512,H=148;
-  ctx.clearRect(0,0,W,H);
-  ctx.fillStyle='rgba(4,10,20,0.88)';
-  ctx.beginPath();ctx.roundRect(2,2,W-4,H-4,12);ctx.fill();
-  ctx.strokeStyle='rgba(30,64,100,0.8)';ctx.lineWidth=1.5;
-  ctx.beginPath();ctx.roundRect(2,2,W-4,H-4,12);ctx.stroke();
-
-  // Speed row — big, colored
-  ctx.font='bold 36px "Rajdhani",sans-serif';
-  ctx.fillStyle=col;ctx.textAlign='left';ctx.textBaseline='middle';
-  ctx.fillText(spd_kms.toFixed(1)+' km/s',14,38);
-  ctx.font='bold 20px "Share Tech Mono",monospace';
-  ctx.fillStyle=col;ctx.textAlign='right';
-  ctx.fillText(label,W-14,38);
-
-  // Divider
-  ctx.strokeStyle='rgba(30,64,100,0.6)';ctx.lineWidth=1;
-  ctx.beginPath();ctx.moveTo(14,60);ctx.lineTo(W-14,60);ctx.stroke();
-
-  // Circ / Escape row
-  ctx.font='15px "Share Tech Mono",monospace';
-  ctx.fillStyle='rgba(140,180,200,0.85)';ctx.textAlign='left';ctx.textBaseline='middle';
-  ctx.fillText('CIRC  '+vC_kms.toFixed(1)+' km/s',14,82);
-  ctx.fillStyle='rgba(180,140,140,0.85)';ctx.textAlign='right';
-  ctx.fillText('ESCAPE  '+vE_kms.toFixed(1)+' km/s',W-14,82);
-
-  // Progress bar
-  const barX=14,barY=102,barW=W-28,barH=18;
-  ctx.fillStyle='rgba(20,40,60,0.8)';ctx.beginPath();ctx.roundRect(barX,barY,barW,barH,4);ctx.fill();
-  const fill=Math.min(speed_wu_day/vE,1.0);
-  const barFill=ctx.createLinearGradient(barX,0,barX+barW,0);
-  barFill.addColorStop(0,'#4488ff');barFill.addColorStop(0.45,'#00ff88');
-  barFill.addColorStop(0.75,'#ffcc00');barFill.addColorStop(1,'#ff4444');
-  ctx.fillStyle=barFill;ctx.beginPath();ctx.roundRect(barX,barY,barW*fill,barH,4);ctx.fill();
-  // Circ marker
-  const circX=barX+(vC/vE)*barW;
-  ctx.strokeStyle='rgba(255,255,255,0.6)';ctx.lineWidth=2;
-  ctx.beginPath();ctx.moveTo(circX,barY-2);ctx.lineTo(circX,barY+barH+2);ctx.stroke();
-  ctx.fillStyle='rgba(255,255,255,0.7)';ctx.font='11px "Share Tech Mono",monospace';
-  ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText('CIRC',circX,barY+barH+3);
-
-  // Radius info
   const r_km=Math.round(r/getScale(currentSys)/1000);
-  ctx.fillStyle='rgba(90,120,136,0.8)';ctx.font='13px "Share Tech Mono",monospace';
-  ctx.textAlign='center';ctx.textBaseline='bottom';
-  ctx.fillText('r = '+r_km+',000 km',W/2,H-4);
+
+  const ratio=speed_wu_day/vC;
+  let col;
+  if(ratio<0.5)      col='#4488ff';
+  else if(ratio<0.9) col='#00ccff';
+  else if(ratio<1.1) col='#00ff88';
+  else if(speed_wu_day<vE) col='#ffcc00';
+  else               col='#ff4444';
+
+  const ctx=readoutCtx,W=220,H=52;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='rgba(4,8,16,0.80)';
+  ctx.beginPath();ctx.roundRect(1,1,W-2,H-2,8);ctx.fill();
+  ctx.strokeStyle=col+'66';ctx.lineWidth=1.2;
+  ctx.beginPath();ctx.roundRect(1,1,W-2,H-2,8);ctx.stroke();
+
+  // Speed
+  ctx.fillStyle=col;
+  ctx.font='bold 22px "Rajdhani",sans-serif';
+  ctx.textAlign='left';ctx.textBaseline='middle';
+  ctx.fillText(spd_kms.toFixed(1)+' km/s',8,18);
+
+  // Radius
+  ctx.fillStyle='rgba(140,180,210,0.85)';
+  ctx.font='13px "Share Tech Mono",monospace';
+  ctx.fillText('r = '+r_km+',000 km',8,38);
 
   readoutTex.needsUpdate=true;
 }
@@ -526,9 +497,11 @@ const VR_BUTTONS=[
   {id:'swreset', px:{x:332,y:438,w:172,h:56},action:()=>vrPanelResetSW()              },
   {id:'scaledn', px:{x:8,  y:530,w:80, h:50},action:()=>adjustThrowScale(-0.05)       },
   {id:'scaleup', px:{x:424,y:530,w:80, h:50},action:()=>adjustThrowScale( 0.05)       },
+  {id:'labels',  px:{x:8,  y:596,w:496,h:50},action:()=>vrToggleLabels()              },
 ];
 
 function adjustThrowScale(d){throwScale=parseFloat(Math.max(0.05,Math.min(2.0,throwScale+d)).toFixed(2));renderVRPanel();}
+function vrToggleLabels(){showMoonLabels=!showMoonLabels;if(!showMoonLabels)moonSprites.forEach(s=>s.visible=false);renderVRPanel();}
 
 const vrPanelGroup=new THREE.Group();vrPanelGroup.visible=false;scene.add(vrPanelGroup);
 const vrPanelCanvas=document.createElement('canvas');vrPanelCanvas.width=PANEL_PX_W;vrPanelCanvas.height=PANEL_PX_H;
@@ -632,16 +605,19 @@ function renderVRPanel(){
   ctx.fillStyle='#ff3388';ctx.font='bold 24px "Rajdhani",sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(throwScale.toFixed(2)+'×',256,555);
   drawBtn({x:424,y:530,w:80,h:50},'+',false,null);
 
+  // Labels toggle
+  drawBtn({x:8,y:596,w:496,h:50},showMoonLabels?'◉ MOON LABELS  ON':'◎ MOON LABELS  OFF',showMoonLabels,'#4fc3f7');
+
   // Grip hint
   ctx.fillStyle='rgba(255,51,136,0.65)';ctx.font='15px "Share Tech Mono",monospace';ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.fillText('GRIP BUTTON  ·  SPAWN & THROW MOON',W/2,620);
+  ctx.fillText('GRIP BUTTON  ·  SPAWN & THROW MOON',W/2,666);
 
   // Thrown moon status
   if(tmState){
     const statusText=tmState.held?'● HOLDING MOON':'● MOON IN FLIGHT';
     ctx.fillStyle=tmState.held?'rgba(255,51,136,0.9)':'rgba(255,180,51,0.9)';
     ctx.font='bold 16px "Share Tech Mono",monospace';ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillText(statusText,W/2,650);
+    ctx.fillText(statusText,W/2,700);
   }
 
   vrPanelTex.needsUpdate=true;
@@ -652,6 +628,38 @@ function renderVRPanel(){
 // ═══════════════════════════════════════════════════════════════════════
 const controllerRayMats=[],controllerLines=[],controllers=[];
 const _rcVR=new THREE.Raycaster(),_cDir=new THREE.Vector3(),_cPos=new THREE.Vector3();
+
+// ── Planet occlusion check for moon name sprites ──
+// Raycast in orrery-local space from camera toward each moon.
+// If the ray hits the planet sphere first, hide the label.
+const _occRay = new THREE.Ray();
+const _occSphere = new THREE.Sphere(new THREE.Vector3(0,0,0), 1); // radius set per-frame
+const _occCamLocal = new THREE.Vector3();
+const _occMoonLocal = new THREE.Vector3();
+const _occHit = new THREE.Vector3();
+
+function updateSpriteOcclusion(){
+  if(!vrActive) return;
+  const sys = SYSTEMS[currentSys];
+  _occSphere.radius = sys.dispRadius;
+  // Camera world → orrery local
+  renderer.xr.getCamera(camera).getWorldPosition(_occCamLocal);
+  orreryGroup.worldToLocal(_occCamLocal);
+
+  moonMeshes.forEach((mesh, i) => {
+    if(!moonSprites[i] || !moonSprites[i].visible) return;
+    _occMoonLocal.copy(mesh.position);
+    const dir = _occMoonLocal.clone().sub(_occCamLocal).normalize();
+    _occRay.set(_occCamLocal, dir);
+    const distToMoon = _occCamLocal.distanceTo(_occMoonLocal);
+    const hit = _occRay.intersectSphere(_occSphere, _occHit);
+    if(hit && _occCamLocal.distanceTo(_occHit) < distToMoon - 0.05){
+      moonSprites[i].material.opacity = 0;
+    } else {
+      moonSprites[i].material.opacity = 0.92;
+    }
+  });
+}
 
 function setupControllers(){
   for(let i=0;i<2;i++){
@@ -753,10 +761,9 @@ function updateThrownMoon(dt_real,sim_dt){
     thrownHaloMesh.position.copy(localPos);
     thrownHaloMesh.rotation.z+=0.04;
 
-    // Readout
-    const r=localPos.length();
+    // Readout — offset above+right so it doesn't shade the moon
     if(r>0.1) updateReadout(velMag,localPos);
-    readoutSprite.position.set(localPos.x,localPos.y+0.75,localPos.z);
+    readoutSprite.position.set(localPos.x,localPos.y+1.2,localPos.z);
 
     // Live orbit preview
     if(velMag>0.01&&r>0.5){
@@ -774,7 +781,7 @@ function updateThrownMoon(dt_real,sim_dt){
     const planetR=SYSTEMS[currentSys].dispRadius;
     const rn=verletStep(tmState.pos,tmState.vel,GM,sim_dt);
     thrownMoonMesh.position.copy(tmState.pos);
-    readoutSprite.position.set(tmState.pos.x,tmState.pos.y+0.75,tmState.pos.z);
+    readoutSprite.position.set(tmState.pos.x,tmState.pos.y+1.2,tmState.pos.z);
     const speed=tmState.vel.length();
     updateReadout(speed,tmState.pos);
 
@@ -837,16 +844,33 @@ function buildRingHalf(ri,ro,sa,ea,ord){
 //  MOON SPRITES
 // ═══════════════════════════════════════════════════════════════════════
 function makeMoonSprite(name,colorHex){
-  const cv=document.createElement('canvas');cv.width=256;cv.height=56;
+  // Measure text width first so canvas is tight around the label
+  const tmpCv=document.createElement('canvas');const tmpCtx=tmpCv.getContext('2d');
+  tmpCtx.font='bold 18px "Share Tech Mono",monospace';
+  const tw=tmpCtx.measureText(name).width;
+  const PAD=10, W=Math.ceil(tw+PAD*2+8), H=28; // 8px for left color bar
+  const cv=document.createElement('canvas');cv.width=W;cv.height=H;
   const ctx=cv.getContext('2d');
-  ctx.fillStyle='rgba(6,10,18,0.72)';ctx.beginPath();ctx.roundRect(2,2,252,52,10);ctx.fill();
+  // Subtle dark pill
+  ctx.fillStyle='rgba(4,8,16,0.75)';
+  ctx.beginPath();ctx.roundRect(0,0,W,H,6);ctx.fill();
+  // Left color accent bar
   const r=(colorHex>>16)&0xff,g=(colorHex>>8)&0xff,b=colorHex&0xff;
-  ctx.fillStyle=`rgba(${r},${g},${b},0.9)`;ctx.fillRect(2,2,5,52);
-  ctx.fillStyle=`rgb(${r},${g},${b})`;ctx.font='bold 28px "Share Tech Mono",monospace';
-  ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(name,131,28);
+  ctx.fillStyle=`rgba(${r},${g},${b},0.9)`;ctx.fillRect(0,0,4,H);
+  // Name
+  ctx.fillStyle=`rgb(${r},${g},${b})`;
+  ctx.font='bold 18px "Share Tech Mono",monospace';
+  ctx.textAlign='left';ctx.textBaseline='middle';
+  ctx.fillText(name,12,H/2);
   const tex=new THREE.CanvasTexture(cv);
-  const mat=new THREE.SpriteMaterial({map:tex,depthTest:false,transparent:true});
-  const sprite=new THREE.Sprite(mat);sprite.scale.set(2.2,0.48,1);sprite.visible=false;
+  // depthTest:true so planet occludes them; we also do per-frame raycast check
+  const mat=new THREE.SpriteMaterial({map:tex,depthTest:true,transparent:true,opacity:0.92});
+  const sprite=new THREE.Sprite(mat);
+  // Scale: want label ~0.5 world-units wide in orrery space
+  const aspect=W/H;
+  sprite.scale.set(0.55*aspect/H*H, 0.55, 1); // keep consistent height
+  sprite.scale.set(0.6,0.6*(H/W),1);           // simpler: fix height, derive width
+  sprite.visible=false;
   return sprite;
 }
 
@@ -1077,8 +1101,26 @@ function initVRButton(){
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  BILLBOARD
+//  SPRITE OCCLUSION — hide moon labels when planet is in the way
 // ═══════════════════════════════════════════════════════════════════════
+const _moonWP = new THREE.Vector3();
+function updateSpriteOcclusion(){
+  if(!vrActive||!planetMesh)return;
+  const xrCam=renderer.xr.getCamera(camera);
+  xrCam.getWorldPosition(_camWP);
+  moonSprites.forEach((sprite,i)=>{
+    if(!showMoonLabels){sprite.visible=false;return;}
+    moonMeshes[i].getWorldPosition(_moonWP);
+    const dir=_moonWP.clone().sub(_camWP);
+    const dist=dir.length();
+    _occRC.set(_camWP,dir.normalize());
+    _occRC.far=dist-0.01; // stop just before the moon itself
+    const hits=_occRC.intersectObject(planetMesh);
+    sprite.visible=hits.length===0;
+  });
+}
+
+
 const _camWP=new THREE.Vector3();
 function billboardVRPanel(){
   if(!vrActive)return;
@@ -1124,9 +1166,12 @@ function animate(ts){
   if(vrActive){
     updateThrownMoon(dt_real,sim_dt);
     updateSparks(sim_dt);
-    billboardVRPanel();
     updateControllerHighlight();
-    if(ts-lastPanelRedraw>250){renderVRPanel();lastPanelRedraw=ts;}
+    billboardVRPanel();
+    updateSpriteOcclusion();
+    // Redraw panel: every frame when moon held (speed changes fast), else 10fps
+    const panelInterval = (tmState&&tmState.held) ? 0 : 100;
+    if(ts-lastPanelRedraw > panelInterval){renderVRPanel();lastPanelRedraw=ts;}
   }
 
   renderer.render(scene,camera);
