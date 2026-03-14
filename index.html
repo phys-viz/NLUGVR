@@ -863,6 +863,7 @@ function makeMoonSprite(name,colorHex){
   ctx.font='bold 18px "Share Tech Mono",monospace';
   ctx.textAlign='left';ctx.textBaseline='middle';
   ctx.fillText(name,12,H/2);
+  const tex=new THREE.CanvasTexture(cv);
   // depthTest:false — we handle planet occlusion via per-frame raycast opacity.
   // Setting true causes the moon sphere itself to occlude the label.
   const mat=new THREE.SpriteMaterial({map:tex,depthTest:false,transparent:true,opacity:0.92});
