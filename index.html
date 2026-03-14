@@ -761,6 +761,7 @@ function updateThrownMoon(dt_real,sim_dt){
     thrownHaloMesh.position.copy(localPos);
     thrownHaloMesh.rotation.z+=0.04;
 
+    const r=localPos.length();
     // Readout — offset above+right so it doesn't shade the moon
     if(r>0.1) updateReadout(velMag,localPos);
     readoutSprite.position.set(localPos.x,localPos.y+1.2,localPos.z);
