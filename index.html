@@ -346,11 +346,31 @@ const UP_TOP=new THREE.Vector3(0,1,0),UP_SCOPE=new THREE.Vector3(0,0,1);
 let vrViewMode='top';
 
 // ── Throwable moon state ──
-const THROWN_COLOR = 0xff3388;
-let throwScale     = 0.15;   // maps VR hand m/s → sim wu/day
-let tmState        = null;   // null = no moon, else {pos, vel, held, ctrlIdx}
-const _prevCtrlPos = [new THREE.Vector3(),new THREE.Vector3()];
-const _currCtrlPos = [new THREE.Vector3(),new THREE.Vector3()];
+const THROWN_COLOR  = 0xff3388;
+let throwScale      = 0.15;
+let tmState         = null;   // null | {pos, vel, held, ctrlIdx}
+const _prevCtrlPos  = [new THREE.Vector3(), new THREE.Vector3()];
+const _currCtrlPos  = [new THREE.Vector3(), new THREE.Vector3()];
+
+// Velocity ring buffer — 6 frames, pick peak on release
+const VEL_BUF_SIZE  = 6;
+const velBuf        = Array.from({length:VEL_BUF_SIZE}, ()=>new THREE.Vector3());
+let   velBufIdx     = 0;
+
+function clearVelBuf(){
+  velBuf.forEach(v=>v.set(0,0,0));
+  velBufIdx=0;
+}
+function pushVelBuf(v){ velBuf[velBufIdx%VEL_BUF_SIZE].copy(v); velBufIdx++; }
+function peakVelBuf(){
+  // Return the entry with highest magnitude
+  let best=velBuf[0], bestMag=best.lengthSq();
+  for(let i=1;i<VEL_BUF_SIZE;i++){
+    const m=velBuf[i].lengthSq();
+    if(m>bestMag){bestMag=m;best=velBuf[i];}
+  }
+  return best.clone();
+}
 
 // ═══════════════════════════════════════════════════════════════════════
 //  THREE.JS SETUP
@@ -386,17 +406,8 @@ const thrownHaloMesh=new THREE.Mesh(
 thrownHaloMesh.renderOrder=5;thrownHaloMesh.visible=false;
 orreryGroup.add(thrownHaloMesh);
 
-// ── Orbit preview line ──
-const MAX_PREVIEW_PTS=401;
-const previewPositions=new Float32Array(MAX_PREVIEW_PTS*3);
-const previewGeo=new THREE.BufferGeometry();
-previewGeo.setAttribute('position',new THREE.BufferAttribute(previewPositions,3));
-previewGeo.setDrawRange(0,0);
-const previewLine=new THREE.Line(previewGeo,
-  new THREE.LineBasicMaterial({color:THROWN_COLOR,transparent:true,opacity:0.45,depthTest:false})
-);
-previewLine.renderOrder=5;previewLine.visible=false;
-orreryGroup.add(previewLine);
+
+
 
 // ── Thrown moon readout sprite — speed + radius only, floats above moon ──
 const readoutCv=document.createElement('canvas');readoutCv.width=220;readoutCv.height=52;
@@ -710,25 +721,20 @@ function onSqueezeStart(idx){
   const localPos=orreryGroup.worldToLocal(_ctrlWP.clone());
   tmState={pos:localPos,vel:new THREE.Vector3(),held:true,ctrlIdx:idx};
   _prevCtrlPos[idx].copy(localPos);
+  clearVelBuf();
   thrownMoonMesh.position.copy(localPos);
   thrownMoonMesh.visible=true;
   thrownHaloMesh.position.copy(localPos);
   thrownHaloMesh.visible=true;
   readoutSprite.visible=true;
-  previewLine.visible=true;
   controllerRayMats[idx].color.setHex(0xff3388);
   renderVRPanel();
 }
 
 function onSqueezeEnd(idx){
   if(!tmState||!tmState.held||tmState.ctrlIdx!==idx)return;
-  // Launch: velocity from last frame delta
-  const ctrl=controllers[idx];
-  ctrl.getWorldPosition(_ctrlWP);
-  const localPos=orreryGroup.worldToLocal(_ctrlWP.clone());
-  // vel [wu/sim_day] = Δpos_wu / dt_real / simSpeed * throwScale
-  // We stored _prevCtrlPos as orrery-local wu from last frame
-  // Use whatever velocity was computed last frame (stored in tmState.vel)
+  // Use peak velocity from the last 6 frames — captures throw intent, not finger-release lag
+  tmState.vel=peakVelBuf();
   tmState.held=false;
   thrownHaloMesh.visible=false;
   controllerRayMats[idx].color.setHex(0x4fc3f7);
@@ -753,7 +759,9 @@ function updateThrownMoon(dt_real,sim_dt){
     // dt_real is real seconds. v_wu_day = delta_wu / dt_real [wu/s] / simSpeed [simdays/s] * throwScale
     const velMag=dt_real>0.001?delta.length()/(dt_real*simSpeed)*throwScale:0;
     const velDir=delta.length()>0?delta.clone().normalize():new THREE.Vector3(0,1,0);
-    tmState.vel=velDir.multiplyScalar(velMag);
+    const frameVel=velDir.clone().multiplyScalar(velMag);
+    pushVelBuf(frameVel);
+    tmState.vel=frameVel;
     _prevCtrlPos[tmState.ctrlIdx].copy(localPos);
 
     tmState.pos.copy(localPos);
@@ -766,15 +774,7 @@ function updateThrownMoon(dt_real,sim_dt){
     if(r>0.1) updateReadout(velMag,localPos);
     readoutSprite.position.set(localPos.x,localPos.y+1.2,localPos.z);
 
-    // Live orbit preview — recompute every 3rd frame (still looks smooth, saves ~270 verlet steps/frame)
-    previewFrameCount++;
-    if(velMag>0.01&&r>0.5&&previewFrameCount%3===0){
-      const pts=computeOrbitPreview(localPos.clone(),tmState.vel.clone(),GM);
-      const n=Math.min(pts.length,MAX_PREVIEW_PTS);
-      for(let i=0;i<n;i++){previewPositions[i*3]=pts[i].x;previewPositions[i*3+1]=pts[i].y;previewPositions[i*3+2]=pts[i].z;}
-      previewGeo.attributes.position.needsUpdate=true;
-      previewGeo.setDrawRange(0,n);
-    } else {previewGeo.setDrawRange(0,0);}
+    // Live orbit preview removed — hand velocity changes too rapidly to be readable
     return;
   }
 
@@ -792,7 +792,6 @@ function updateThrownMoon(dt_real,sim_dt){
       triggerSparks(tmState.pos.clone());
       thrownMoonMesh.visible=false;
       readoutSprite.visible=false;
-      previewLine.visible=false;
       thrownHaloMesh.visible=false;
       tmState=null;
       renderVRPanel();
@@ -802,14 +801,11 @@ function updateThrownMoon(dt_real,sim_dt){
     if(rn>22){
       thrownMoonMesh.visible=false;
       readoutSprite.visible=false;
-      previewLine.visible=false;
       tmState=null;
       renderVRPanel();
       return;
     }
   }
-  // Keep preview hidden in flight (cleaner)
-  previewGeo.setDrawRange(0,0);
 }
 
 function updateControllerHighlight(){
@@ -983,7 +979,17 @@ function resetSim(){
   if(vrActive)renderVRPanel();
 }
 function onSpeedChange(el){simSpeed=parseFloat(el.value);document.getElementById('val-speed').textContent=simSpeed.toFixed(1)+' d/s';}
-function switchSystem(sysName){currentSys=sysName;buildSystem(sysName);}
+function switchSystem(sysName){
+  // Dismiss any thrown moon — it belongs to the old system
+  if(tmState){
+    triggerSparks(tmState.pos.clone());
+    thrownMoonMesh.visible=false;
+    thrownHaloMesh.visible=false;
+    readoutSprite.visible=false;
+    tmState=null;
+  }
+  currentSys=sysName;buildSystem(sysName);
+}
 function toggleStopwatch(){
   const btn=document.getElementById('btn-sw');
   if(!swRunning){swRunning=true;swStart=simTime-swElapsed;btn.textContent='■ Stop';btn.classList.add('active');}
@@ -1077,7 +1083,7 @@ function onVRSessionStart(){
 }
 function onVRSessionEnd(){
   vrActive=false;tmState=null;
-  thrownMoonMesh.visible=false;thrownHaloMesh.visible=false;readoutSprite.visible=false;previewLine.visible=false;
+  thrownMoonMesh.visible=false;thrownHaloMesh.visible=false;readoutSprite.visible=false;
   orreryGroup.scale.setScalar(1);orreryGroup.position.set(0,0,0);orreryGroup.rotation.x=0;
   spaceEnv.visible=false;vrPanelGroup.visible=false;
   controllerLines.forEach(l=>l.visible=false);
@@ -1134,7 +1140,6 @@ function billboardVRPanel(){
 // ═══════════════════════════════════════════════════════════════════════
 function easeInOut(t){return t<0.5?2*t*t:-1+(4-2*t)*t;}
 let lastPanelRedraw=0;
-let previewFrameCount=0;
 
 function animate(ts){
   const dt_real=(lastTs!==null)?Math.min((ts-lastTs)/1000,0.1):0;lastTs=ts;
