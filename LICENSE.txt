@@ -1,0 +1,41 @@
+Moon Lab — Kepler's Laws VR Simulation
+Copyright (c) 2026 Anthony [Last Name]. All rights reserved.
+
+EDUCATIONAL USE LICENSE
+
+Permission is granted to students, teachers, and educational institutions
+to use, display, and interact with this software free of charge for
+non-commercial educational purposes, subject to the following conditions:
+
+  1. This copyright notice and license must be included in all copies or
+     substantial portions of the software.
+
+  2. The software may not be modified, adapted, translated, or used to
+     create derivative works without written permission from the copyright
+     holder.
+
+  3. The software may not be sold, sublicensed, bundled with paid products,
+     or used in any commercial context without a separate written commercial
+     license from the copyright holder.
+
+  4. Attribution must be preserved. The "Moon Lab" title, authorship, and
+     this notice may not be removed or obscured.
+
+COMMERCIAL LICENSING
+
+For licensing inquiries — including use in paid curriculum products,
+edtech platforms, school district deployments, or any commercial context —
+contact: [your email]
+
+DISCLAIMER
+
+THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. IN NO EVENT SHALL
+THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY
+ARISING FROM THE USE OF THIS SOFTWARE.
+
+THIRD-PARTY COMPONENTS
+
+This software uses Three.js (r128), copyright (c) 2010-2024 three.js authors,
+licensed under the MIT License. See https://threejs.org for details.

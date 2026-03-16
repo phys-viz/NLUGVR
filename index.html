@@ -3,6 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <title>Moon Lab — Kepler's Laws</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#080c12">
+<meta name="description" content="Interactive VR simulation of Kepler's Third Law">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Moon Lab">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&display=swap');
 * { margin:0; padding:0; box-sizing:border-box; }
@@ -1375,6 +1384,16 @@ function revealMass(){
   document.getElementById('mass-val').textContent=coeff.toFixed(2)+' × 10²⁶ kg';
   document.getElementById('mass-result').style.display='block';
   document.getElementById('btn-reveal').style.display='none';
+}
+</script>
+<script>
+// Register service worker for offline / PWA support
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => console.log('Moon Lab SW registered, scope:', reg.scope))
+      .catch(err => console.warn('Moon Lab SW registration failed:', err));
+  });
 }
 </script>
 </body>

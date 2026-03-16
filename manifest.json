@@ -1,0 +1,26 @@
+{
+  "name": "Moon Lab — Kepler's Laws",
+  "short_name": "Moon Lab",
+  "description": "Interactive VR simulation of Kepler's Third Law using Jupiter, Saturn, and mystery planet Verus",
+  "start_url": "./moon-lab-vr.html",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#080c12",
+  "theme_color": "#080c12",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["education", "science"],
+  "lang": "en"
+}
