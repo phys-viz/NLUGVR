@@ -538,11 +538,11 @@ measureLine.renderOrder=10; measureLine.visible=false;
 orreryGroup.add(measureLine);
 
 // Measure readout sprite
-const measCv=document.createElement('canvas'); measCv.width=320; measCv.height=72;
+const measCv=document.createElement('canvas'); measCv.width=380; measCv.height=96;
 const measCtx=measCv.getContext('2d');
 const measTex=new THREE.CanvasTexture(measCv);
 const measSprite=new THREE.Sprite(new THREE.SpriteMaterial({map:measTex,depthTest:false,transparent:true}));
-measSprite.scale.set(2.0,0.45,1); measSprite.visible=false;
+measSprite.scale.set(3.2,0.82,1); measSprite.visible=false;
 orreryGroup.add(measSprite);
 
 function updateMeasureReadout(ptA,ptB){
@@ -553,28 +553,27 @@ function updateMeasureReadout(ptA,ptB){
   const sysShort=currentSys==='Jupiter'?'Jup':currentSys==='Saturn'?'Sat':'Ver';
   vrMeasureResult={km,diam,sysShort};
 
-  const ctx=measCtx,W=320,H=80;
-  measCv.height=H;
+  const ctx=measCtx,W=380,H=96;
+  measCv.width=W; measCv.height=H;
   ctx.clearRect(0,0,W,H);
   ctx.fillStyle='rgba(4,8,20,0.88)';
   ctx.beginPath();ctx.roundRect(1,1,W-2,H-2,10);ctx.fill();
   ctx.strokeStyle='rgba(176,144,255,0.7)';ctx.lineWidth=1.5;
   ctx.beginPath();ctx.roundRect(1,1,W-2,H-2,10);ctx.stroke();
 
-  // Both lines same font size and weight
-  ctx.font='bold 26px "Rajdhani",sans-serif';
   ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.font='bold 32px "Rajdhani",sans-serif';
   ctx.fillStyle='#c0a8ff';
-  ctx.fillText(diam+' '+sysShort+' diameters', W/2, 26);
+  ctx.fillText(diam+' '+sysShort+' diameters', W/2, 30);
   ctx.fillStyle='#8ab8d8';
-  ctx.fillText('≈ '+km+',000 km', W/2, 56);
+  ctx.fillText('≈ '+km+',000 km', W/2, 68);
 
   measTex.needsUpdate=true;
 
   const mid=ptA.clone().add(ptB).multiplyScalar(0.5);
-  measSprite.position.set(mid.x, mid.y+0.9, mid.z);
+  measSprite.position.set(mid.x, mid.y+1.1, mid.z);
   measSprite.visible=true;
-  measSprite.scale.set(2.2,0.5,1);
+  measSprite.scale.set(3.2,0.82,1);
 
   renderVRPanel();
 }
@@ -764,22 +763,22 @@ function renderVRPanel(){
   // Measure distance
   drawLabel('MEASURE DISTANCE',606);
   const measLabel = vrMeasureMode
-    ? (vrMeasurePtA ? '◎ POINT B — AIM + TRIGGER' : '◎ POINT A — AIM + TRIGGER')
-    : '◎ MEASURE DISTANCE';
+    ? (vrMeasurePtA ? '◎ POINT B — POINT & TRIGGER' : '◎ POINT A — POINT & TRIGGER')
+    : '◎ POINT & TRIGGER TO MEASURE';
   drawBtn({x:8,y:618,w:496,h:54}, measLabel, vrMeasureMode, '#b090ff');
 
   // Result or hint
   if(vrMeasureResult){
-    ctx.fillStyle='rgba(8,8,24,0.85)';ctx.beginPath();ctx.roundRect(8,680,496,52,8);ctx.fill();
-    ctx.strokeStyle='rgba(176,144,255,0.5)';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(8,680,496,52,8);ctx.stroke();
-    ctx.fillStyle='#c0a8ff';ctx.font='bold 22px "Rajdhani",sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillText(vrMeasureResult.diam+' '+vrMeasureResult.sysShort+' diameters',W/2,697);
-    ctx.fillStyle='rgba(140,180,210,0.85)';ctx.font='13px "Share Tech Mono",monospace';
-    ctx.fillText('≈ '+vrMeasureResult.km+',000 km',W/2,717);
+    ctx.fillStyle='rgba(8,8,24,0.85)';ctx.beginPath();ctx.roundRect(8,680,496,64,8);ctx.fill();
+    ctx.strokeStyle='rgba(176,144,255,0.5)';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(8,680,496,64,8);ctx.stroke();
+    ctx.fillStyle='#c0a8ff';ctx.font='bold 24px "Rajdhani",sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(vrMeasureResult.diam+' '+vrMeasureResult.sysShort+' diameters',W/2,700);
+    ctx.fillStyle='#8ab8d8';ctx.font='bold 24px "Rajdhani",sans-serif';
+    ctx.fillText('≈ '+vrMeasureResult.km+',000 km',W/2,728);
   } else if(vrMeasurePtA&&!vrMeasurePtB){
-    ctx.fillStyle='rgba(176,144,255,0.6)';ctx.font='13px "Share Tech Mono",monospace';
+    ctx.fillStyle='rgba(176,144,255,0.7)';ctx.font='bold 18px "Rajdhani",sans-serif';
     ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillText('Point A set — aim at second point',W/2,706);
+    ctx.fillText('POINT A SET — AIM AT SECOND POINT',W/2,712);
   }
 
   drawDivider(742);
