@@ -506,13 +506,10 @@ const VR_BUTTONS=[
   {id:'pause',   px:{x:8,  y:278,w:496,h:56},action:()=>vrPanelTogglePause()          },
   {id:'swstart', px:{x:8,  y:438,w:316,h:56},action:()=>vrPanelToggleSW()             },
   {id:'swreset', px:{x:332,y:438,w:172,h:56},action:()=>vrPanelResetSW()              },
-  {id:'scaledn', px:{x:8,  y:530,w:80, h:50},action:()=>adjustThrowScale(-0.05)       },
-  {id:'scaleup', px:{x:424,y:530,w:80, h:50},action:()=>adjustThrowScale( 0.05)       },
-  {id:'measure', px:{x:8,  y:618,w:496,h:54},action:()=>vrToggleMeasure()             },
-  {id:'labels',  px:{x:8,  y:742,w:496,h:46},action:()=>vrToggleLabels()              },
+  {id:'measure', px:{x:8,  y:530,w:496,h:54},action:()=>vrToggleMeasure()             },
+  {id:'labels',  px:{x:8,  y:674,w:496,h:46},action:()=>vrToggleLabels()              },
 ];
 
-function adjustThrowScale(d){throwScale=parseFloat(Math.max(0.05,Math.min(2.0,throwScale+d)).toFixed(2));renderVRPanel();}
 function vrToggleLabels(){showMoonLabels=!showMoonLabels;if(!showMoonLabels)moonSprites.forEach(s=>s.visible=false);renderVRPanel();}
 
 // ── VR Distance Measurement ──
@@ -570,8 +567,9 @@ function updateMeasureReadout(ptA,ptB){
 
   measTex.needsUpdate=true;
 
-  const mid=ptA.clone().add(ptB).multiplyScalar(0.5);
-  measSprite.position.set(mid.x, mid.y+1.1, mid.z);
+  // Position 80% toward ptB (moon end) so it stays out of the planet
+  const labelPos = ptA.clone().lerp(ptB, 0.8);
+  measSprite.position.set(labelPos.x, labelPos.y+1.1, labelPos.z);
   measSprite.visible=true;
   measSprite.scale.set(3.2,0.82,1);
 
@@ -750,49 +748,47 @@ function renderVRPanel(){
 
   drawDivider(504);
 
-  // Throw scale
-  drawLabel('THROW SCALE',518);
-  drawBtn({x:8,  y:530,w:80,h:50},'−',false,null);
-  ctx.fillStyle='rgba(8,18,32,0.85)';ctx.beginPath();ctx.roundRect(96,530,320,50,6);ctx.fill();
-  ctx.strokeStyle='rgba(26,58,96,0.6)';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(96,530,320,50,6);ctx.stroke();
-  ctx.fillStyle='#ff3388';ctx.font='bold 24px "Rajdhani",sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(throwScale.toFixed(2)+'×',256,555);
-  drawBtn({x:424,y:530,w:80,h:50},'+',false,null);
-
-  drawDivider(592);
-
   // Measure distance
-  drawLabel('MEASURE DISTANCE',606);
+  drawLabel('MEASURE DISTANCE',518);
   const measLabel = vrMeasureMode
     ? (vrMeasurePtA ? '◎ POINT B — POINT & TRIGGER' : '◎ POINT A — POINT & TRIGGER')
     : '◎ POINT & TRIGGER TO MEASURE';
-  drawBtn({x:8,y:618,w:496,h:54}, measLabel, vrMeasureMode, '#b090ff');
+  drawBtn({x:8,y:530,w:496,h:54}, measLabel, vrMeasureMode, '#b090ff');
 
   // Result or hint
   if(vrMeasureResult){
-    ctx.fillStyle='rgba(8,8,24,0.85)';ctx.beginPath();ctx.roundRect(8,680,496,64,8);ctx.fill();
-    ctx.strokeStyle='rgba(176,144,255,0.5)';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(8,680,496,64,8);ctx.stroke();
+    ctx.fillStyle='rgba(8,8,24,0.85)';ctx.beginPath();ctx.roundRect(8,592,496,64,8);ctx.fill();
+    ctx.strokeStyle='rgba(176,144,255,0.5)';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(8,592,496,64,8);ctx.stroke();
     ctx.fillStyle='#c0a8ff';ctx.font='bold 24px "Rajdhani",sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillText(vrMeasureResult.diam+' '+vrMeasureResult.sysShort+' diameters',W/2,700);
+    ctx.fillText(vrMeasureResult.diam+' '+vrMeasureResult.sysShort+' diameters',W/2,612);
     ctx.fillStyle='#8ab8d8';ctx.font='bold 24px "Rajdhani",sans-serif';
-    ctx.fillText('≈ '+vrMeasureResult.km+',000 km',W/2,728);
+    ctx.fillText('≈ '+vrMeasureResult.km+',000 km',W/2,640);
   } else if(vrMeasurePtA&&!vrMeasurePtB){
     ctx.fillStyle='rgba(176,144,255,0.7)';ctx.font='bold 18px "Rajdhani",sans-serif';
     ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillText('POINT A SET — AIM AT SECOND POINT',W/2,712);
+    ctx.fillText('POINT A SET — AIM AT SECOND POINT',W/2,624);
   }
 
-  drawDivider(742);
+  drawDivider(666);
 
   // Labels toggle
-  drawBtn({x:8,y:742,w:496,h:46},showMoonLabels?'◉ MOON LABELS  ON':'◎ MOON LABELS  OFF',showMoonLabels,'#4fc3f7');
+  drawBtn({x:8,y:674,w:496,h:46},showMoonLabels?'◉ MOON LABELS  ON':'◎ MOON LABELS  OFF',showMoonLabels,'#4fc3f7');
 
-  // Grip hint + moon status
-  ctx.fillStyle='rgba(255,51,136,0.55)';ctx.font='13px "Share Tech Mono",monospace';ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.fillText('GRIP  ·  SPAWN & THROW MOON',W/2,830);
+  drawDivider(730);
+
+  // Grip hint — large, prominent
+  ctx.fillStyle='rgba(255,51,136,0.85)';
+  ctx.font='bold 22px "Rajdhani",sans-serif';
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText('GRIP BUTTON — HOLD & THROW MOON',W/2,762);
+  ctx.fillStyle='rgba(255,51,136,0.5)';
+  ctx.font='15px "Share Tech Mono",monospace';
+  ctx.fillText('move hand to aim · release to launch',W/2,790);
+
   if(tmState){
     ctx.fillStyle=tmState.held?'rgba(255,51,136,0.9)':'rgba(255,180,51,0.9)';
-    ctx.font='bold 15px "Share Tech Mono",monospace';ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillText(tmState.held?'● HOLDING MOON':'● MOON IN FLIGHT',W/2,868);
+    ctx.font='bold 18px "Rajdhani",sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(tmState.held?'● HOLDING MOON':'● MOON IN FLIGHT',W/2,840);
   }
 
   vrPanelTex.needsUpdate=true;
@@ -817,10 +813,10 @@ function updateSpriteOcclusion(){
   if(!vrActive) return;
   const sys = SYSTEMS[currentSys];
   _occSphere.radius = sys.dispRadius;
-  // Camera world → orrery local
   renderer.xr.getCamera(camera).getWorldPosition(_occCamLocal);
   orreryGroup.worldToLocal(_occCamLocal);
 
+  // Moon name labels — fully hide when behind planet
   moonMeshes.forEach((mesh, i) => {
     if(!moonSprites[i] || !moonSprites[i].visible) return;
     _occMoonLocal.copy(mesh.position);
@@ -828,12 +824,20 @@ function updateSpriteOcclusion(){
     _occRay.set(_occCamLocal, dir);
     const distToMoon = _occCamLocal.distanceTo(_occMoonLocal);
     const hit = _occRay.intersectSphere(_occSphere, _occHit);
-    if(hit && _occCamLocal.distanceTo(_occHit) < distToMoon - 0.05){
-      moonSprites[i].material.opacity = 0;
-    } else {
-      moonSprites[i].material.opacity = 0.92;
-    }
+    moonSprites[i].material.opacity =
+      (hit && _occCamLocal.distanceTo(_occHit) < distToMoon - 0.05) ? 0 : 0.92;
   });
+
+  // Measure readout sprite — fade to 35% when behind planet, stay readable
+  if(measSprite.visible){
+    const spriteLocal = measSprite.position.clone();
+    const dir = spriteLocal.clone().sub(_occCamLocal).normalize();
+    _occRay.set(_occCamLocal, dir);
+    const distToSprite = _occCamLocal.distanceTo(spriteLocal);
+    const hit = _occRay.intersectSphere(_occSphere, _occHit);
+    measSprite.material.opacity =
+      (hit && _occCamLocal.distanceTo(_occHit) < distToSprite - 0.05) ? 0.35 : 1.0;
+  }
 }
 
 function setupControllers(){
