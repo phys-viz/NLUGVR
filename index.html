@@ -553,23 +553,28 @@ function updateMeasureReadout(ptA,ptB){
   const sysShort=currentSys==='Jupiter'?'Jup':currentSys==='Saturn'?'Sat':'Ver';
   vrMeasureResult={km,diam,sysShort};
 
-  const ctx=measCtx,W=320,H=72;
+  const ctx=measCtx,W=320,H=80;
+  measCv.height=H;
   ctx.clearRect(0,0,W,H);
   ctx.fillStyle='rgba(4,8,20,0.88)';
   ctx.beginPath();ctx.roundRect(1,1,W-2,H-2,10);ctx.fill();
   ctx.strokeStyle='rgba(176,144,255,0.7)';ctx.lineWidth=1.5;
   ctx.beginPath();ctx.roundRect(1,1,W-2,H-2,10);ctx.stroke();
-  ctx.fillStyle='#c0a8ff';ctx.font='bold 26px "Rajdhani",sans-serif';
+
+  // Both lines same font size and weight
+  ctx.font='bold 26px "Rajdhani",sans-serif';
   ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.fillText(diam+' '+sysShort+' diameters',W/2,26);
-  ctx.fillStyle='rgba(140,180,210,0.85)';ctx.font='14px "Share Tech Mono",monospace';
-  ctx.fillText('≈ '+km+',000 km',W/2,52);
+  ctx.fillStyle='#c0a8ff';
+  ctx.fillText(diam+' '+sysShort+' diameters', W/2, 26);
+  ctx.fillStyle='#8ab8d8';
+  ctx.fillText('≈ '+km+',000 km', W/2, 56);
+
   measTex.needsUpdate=true;
 
-  // Position midpoint + offset above orbital plane
   const mid=ptA.clone().add(ptB).multiplyScalar(0.5);
   measSprite.position.set(mid.x, mid.y+0.9, mid.z);
   measSprite.visible=true;
+  measSprite.scale.set(2.2,0.5,1);
 
   renderVRPanel();
 }
@@ -645,8 +650,10 @@ function handleVRMeasureTrigger(idx){
     measureLine.geometry.attributes.position.needsUpdate=true;
     measureLine.visible=true;
     updateMeasureReadout(vrMeasurePtA, vrMeasurePtB);
-    // Auto-exit measure mode after both points placed
-    vrMeasureMode=false;
+    // Reset to point A so student can keep measuring without re-tapping the button
+    vrMeasurePtA=null; vrMeasurePtB=null;
+    vrMeasureMode=true;
+    renderVRPanel();
   }
 }
 
