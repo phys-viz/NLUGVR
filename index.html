@@ -488,7 +488,7 @@ function updateSparks(simDt){
 // ═══════════════════════════════════════════════════════════════════════
 //  VR PANEL  (512 × 770 px)
 // ═══════════════════════════════════════════════════════════════════════
-const PANEL_PX_W=512,PANEL_PX_H=770;
+const PANEL_PX_W=512,PANEL_PX_H=920;
 const PANEL_K=0.34/PANEL_PX_W;
 const PANEL_W=PANEL_PX_W*PANEL_K;
 const PANEL_H=PANEL_PX_H*PANEL_K;
@@ -508,11 +508,147 @@ const VR_BUTTONS=[
   {id:'swreset', px:{x:332,y:438,w:172,h:56},action:()=>vrPanelResetSW()              },
   {id:'scaledn', px:{x:8,  y:530,w:80, h:50},action:()=>adjustThrowScale(-0.05)       },
   {id:'scaleup', px:{x:424,y:530,w:80, h:50},action:()=>adjustThrowScale( 0.05)       },
-  {id:'labels',  px:{x:8,  y:596,w:496,h:50},action:()=>vrToggleLabels()              },
+  {id:'measure', px:{x:8,  y:618,w:496,h:54},action:()=>vrToggleMeasure()             },
+  {id:'labels',  px:{x:8,  y:742,w:496,h:46},action:()=>vrToggleLabels()              },
 ];
 
 function adjustThrowScale(d){throwScale=parseFloat(Math.max(0.05,Math.min(2.0,throwScale+d)).toFixed(2));renderVRPanel();}
 function vrToggleLabels(){showMoonLabels=!showMoonLabels;if(!showMoonLabels)moonSprites.forEach(s=>s.visible=false);renderVRPanel();}
+
+// ── VR Distance Measurement ──
+let vrMeasureMode  = false;
+let vrMeasurePtA   = null;   // Vector3 in orrery local space
+let vrMeasurePtB   = null;
+let vrMeasureResult= null;   // {km, diameters} when both points set
+
+// Marker spheres for the two points
+const measureMatA = new THREE.MeshBasicMaterial({color:0xb090ff,depthTest:false});
+const measureMatB = new THREE.MeshBasicMaterial({color:0xb090ff,depthTest:false});
+const measureMarkerA = new THREE.Mesh(new THREE.SphereGeometry(0.1,12,12), measureMatA);
+const measureMarkerB = new THREE.Mesh(new THREE.SphereGeometry(0.1,12,12), measureMatB);
+measureMarkerA.renderOrder=10; measureMarkerA.visible=false;
+measureMarkerB.renderOrder=10; measureMarkerB.visible=false;
+orreryGroup.add(measureMarkerA); orreryGroup.add(measureMarkerB);
+
+// Measure line
+const measureLineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3()]);
+const measureLine = new THREE.Line(measureLineGeo,
+  new THREE.LineBasicMaterial({color:0xb090ff,transparent:true,opacity:0.8,depthTest:false}));
+measureLine.renderOrder=10; measureLine.visible=false;
+orreryGroup.add(measureLine);
+
+// Measure readout sprite
+const measCv=document.createElement('canvas'); measCv.width=320; measCv.height=72;
+const measCtx=measCv.getContext('2d');
+const measTex=new THREE.CanvasTexture(measCv);
+const measSprite=new THREE.Sprite(new THREE.SpriteMaterial({map:measTex,depthTest:false,transparent:true}));
+measSprite.scale.set(2.0,0.45,1); measSprite.visible=false;
+orreryGroup.add(measSprite);
+
+function updateMeasureReadout(ptA,ptB){
+  const dist=ptA.distanceTo(ptB);
+  const scale=getScale(currentSys);
+  const km=Math.round(dist/scale/1000);
+  const diam=(dist/actualPlanetDiameter_world(currentSys)).toFixed(2);
+  const sysShort=currentSys==='Jupiter'?'Jup':currentSys==='Saturn'?'Sat':'Ver';
+  vrMeasureResult={km,diam,sysShort};
+
+  const ctx=measCtx,W=320,H=72;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='rgba(4,8,20,0.88)';
+  ctx.beginPath();ctx.roundRect(1,1,W-2,H-2,10);ctx.fill();
+  ctx.strokeStyle='rgba(176,144,255,0.7)';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.roundRect(1,1,W-2,H-2,10);ctx.stroke();
+  ctx.fillStyle='#c0a8ff';ctx.font='bold 26px "Rajdhani",sans-serif';
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(diam+' '+sysShort+' diameters',W/2,26);
+  ctx.fillStyle='rgba(140,180,210,0.85)';ctx.font='14px "Share Tech Mono",monospace';
+  ctx.fillText('≈ '+km+',000 km',W/2,52);
+  measTex.needsUpdate=true;
+
+  // Position midpoint + offset above orbital plane
+  const mid=ptA.clone().add(ptB).multiplyScalar(0.5);
+  measSprite.position.set(mid.x, mid.y+0.9, mid.z);
+  measSprite.visible=true;
+
+  renderVRPanel();
+}
+
+function vrToggleMeasure(){
+  vrMeasureMode=!vrMeasureMode;
+  if(vrMeasureMode){
+    // Entering — clear any previous measurement so students start fresh
+    vrMeasurePtA=null; vrMeasurePtB=null; vrMeasureResult=null;
+    measureMarkerA.visible=false; measureMarkerB.visible=false;
+    measureLine.visible=false; measSprite.visible=false;
+  } else {
+    clearVRMeasure();
+  }
+  renderVRPanel();
+}
+
+function clearVRMeasure(){
+  vrMeasureMode=false;
+  vrMeasurePtA=null; vrMeasurePtB=null; vrMeasureResult=null;
+  measureMarkerA.visible=false; measureMarkerB.visible=false;
+  measureLine.visible=false; measSprite.visible=false;
+  renderVRPanel();
+}
+
+// Intersect controller ray with orbital plane (z=0 in orrery local space)
+// Returns Vector3 in orrery local space, or null if ray is parallel to plane
+const _mCtrlWorldPos = new THREE.Vector3();
+const _mCtrlWorldDir = new THREE.Vector3();
+const _mLocalPos     = new THREE.Vector3();
+const _mLocalDir     = new THREE.Vector3();
+const _mInvMat       = new THREE.Matrix4();
+
+function rayIntersectOrbitalPlane(ctrlIdx){
+  const ctrl=controllers[ctrlIdx];
+  ctrl.getWorldPosition(_mCtrlWorldPos);
+  ctrl.getWorldDirection(_mCtrlWorldDir);
+  _mCtrlWorldDir.negate();
+
+  // Transform ray into orrery local space
+  _mInvMat.copy(orreryGroup.matrixWorld).invert();
+  _mLocalPos.copy(_mCtrlWorldPos).applyMatrix4(_mInvMat);
+  // Direction: apply inverse matrix without translation (use transformDirection)
+  _mLocalDir.copy(_mCtrlWorldDir).transformDirection(_mInvMat);
+
+  // Orbital plane is z=0 in local space
+  // t = -origin.z / dir.z
+  if(Math.abs(_mLocalDir.z) < 0.01) return null; // ray parallel to plane
+  const t = -_mLocalPos.z / _mLocalDir.z;
+  if(t < 0) return null; // intersection behind controller
+  return _mLocalPos.clone().addScaledVector(_mLocalDir, t);
+}
+
+function handleVRMeasureTrigger(idx){
+  const hit = rayIntersectOrbitalPlane(idx);
+  if(!hit) return;
+
+  if(!vrMeasurePtA){
+    vrMeasurePtA = hit;
+    measureMarkerA.position.copy(hit);
+    measureMarkerA.visible=true;
+    renderVRPanel();
+  } else {
+    vrMeasurePtB = hit;
+    measureMarkerB.position.copy(hit);
+    measureMarkerB.visible=true;
+    // Update line geometry
+    const positions=new Float32Array([
+      vrMeasurePtA.x,vrMeasurePtA.y,vrMeasurePtA.z,
+      vrMeasurePtB.x,vrMeasurePtB.y,vrMeasurePtB.z
+    ]);
+    measureLine.geometry.setAttribute('position',new THREE.BufferAttribute(positions,3));
+    measureLine.geometry.attributes.position.needsUpdate=true;
+    measureLine.visible=true;
+    updateMeasureReadout(vrMeasurePtA, vrMeasurePtB);
+    // Auto-exit measure mode after both points placed
+    vrMeasureMode=false;
+  }
+}
 
 const vrPanelGroup=new THREE.Group();vrPanelGroup.visible=false;scene.add(vrPanelGroup);
 const vrPanelCanvas=document.createElement('canvas');vrPanelCanvas.width=PANEL_PX_W;vrPanelCanvas.height=PANEL_PX_H;
@@ -616,19 +752,41 @@ function renderVRPanel(){
   ctx.fillStyle='#ff3388';ctx.font='bold 24px "Rajdhani",sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(throwScale.toFixed(2)+'×',256,555);
   drawBtn({x:424,y:530,w:80,h:50},'+',false,null);
 
+  drawDivider(592);
+
+  // Measure distance
+  drawLabel('MEASURE DISTANCE',606);
+  const measLabel = vrMeasureMode
+    ? (vrMeasurePtA ? '◎ POINT B — AIM + TRIGGER' : '◎ POINT A — AIM + TRIGGER')
+    : '◎ MEASURE DISTANCE';
+  drawBtn({x:8,y:618,w:496,h:54}, measLabel, vrMeasureMode, '#b090ff');
+
+  // Result or hint
+  if(vrMeasureResult){
+    ctx.fillStyle='rgba(8,8,24,0.85)';ctx.beginPath();ctx.roundRect(8,680,496,52,8);ctx.fill();
+    ctx.strokeStyle='rgba(176,144,255,0.5)';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(8,680,496,52,8);ctx.stroke();
+    ctx.fillStyle='#c0a8ff';ctx.font='bold 22px "Rajdhani",sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(vrMeasureResult.diam+' '+vrMeasureResult.sysShort+' diameters',W/2,697);
+    ctx.fillStyle='rgba(140,180,210,0.85)';ctx.font='13px "Share Tech Mono",monospace';
+    ctx.fillText('≈ '+vrMeasureResult.km+',000 km',W/2,717);
+  } else if(vrMeasurePtA&&!vrMeasurePtB){
+    ctx.fillStyle='rgba(176,144,255,0.6)';ctx.font='13px "Share Tech Mono",monospace';
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText('Point A set — aim at second point',W/2,706);
+  }
+
+  drawDivider(742);
+
   // Labels toggle
-  drawBtn({x:8,y:596,w:496,h:50},showMoonLabels?'◉ MOON LABELS  ON':'◎ MOON LABELS  OFF',showMoonLabels,'#4fc3f7');
+  drawBtn({x:8,y:742,w:496,h:46},showMoonLabels?'◉ MOON LABELS  ON':'◎ MOON LABELS  OFF',showMoonLabels,'#4fc3f7');
 
-  // Grip hint
-  ctx.fillStyle='rgba(255,51,136,0.65)';ctx.font='15px "Share Tech Mono",monospace';ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.fillText('GRIP BUTTON  ·  SPAWN & THROW MOON',W/2,666);
-
-  // Thrown moon status
+  // Grip hint + moon status
+  ctx.fillStyle='rgba(255,51,136,0.55)';ctx.font='13px "Share Tech Mono",monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText('GRIP  ·  SPAWN & THROW MOON',W/2,830);
   if(tmState){
-    const statusText=tmState.held?'● HOLDING MOON':'● MOON IN FLIGHT';
     ctx.fillStyle=tmState.held?'rgba(255,51,136,0.9)':'rgba(255,180,51,0.9)';
-    ctx.font='bold 16px "Share Tech Mono",monospace';ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillText(statusText,W/2,700);
+    ctx.font='bold 15px "Share Tech Mono",monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(tmState.held?'● HOLDING MOON':'● MOON IN FLIGHT',W/2,868);
   }
 
   vrPanelTex.needsUpdate=true;
@@ -703,6 +861,12 @@ function onSelectStart(idx){
     ctrl.getWorldPosition(_ctrlWP);
     _panelDragOffset.copy(vrPanelGroup.position).sub(_ctrlWP);
     controllerRayMats[idx].color.setHex(0xffd54f);
+    return;
+  }
+  // Measurement mode — ray into orbital plane
+  if(vrMeasureMode && !tmState?.held){
+    handleVRMeasureTrigger(idx);
+    return;
   }
 }
 function onSelectEnd(idx){
@@ -980,14 +1144,12 @@ function resetSim(){
 }
 function onSpeedChange(el){simSpeed=parseFloat(el.value);document.getElementById('val-speed').textContent=simSpeed.toFixed(1)+' d/s';}
 function switchSystem(sysName){
-  // Dismiss any thrown moon — it belongs to the old system
   if(tmState){
     triggerSparks(tmState.pos.clone());
-    thrownMoonMesh.visible=false;
-    thrownHaloMesh.visible=false;
-    readoutSprite.visible=false;
+    thrownMoonMesh.visible=false;thrownHaloMesh.visible=false;readoutSprite.visible=false;
     tmState=null;
   }
+  clearVRMeasure();
   currentSys=sysName;buildSystem(sysName);
 }
 function toggleStopwatch(){
@@ -1084,6 +1246,7 @@ function onVRSessionStart(){
 function onVRSessionEnd(){
   vrActive=false;tmState=null;
   thrownMoonMesh.visible=false;thrownHaloMesh.visible=false;readoutSprite.visible=false;
+  clearVRMeasure();
   orreryGroup.scale.setScalar(1);orreryGroup.position.set(0,0,0);orreryGroup.rotation.x=0;
   spaceEnv.visible=false;vrPanelGroup.visible=false;
   controllerLines.forEach(l=>l.visible=false);
