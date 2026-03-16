@@ -567,8 +567,11 @@ function updateMeasureReadout(ptA,ptB){
 
   measTex.needsUpdate=true;
 
-  // Position 80% toward ptB (moon end) so it stays out of the planet
-  const labelPos = ptA.clone().lerp(ptB, 0.8);
+  // Always place label near the planet-side point regardless of click order
+  // Planet is at origin — whichever point is closer to origin is the "planet side"
+  const nearPlanet = ptA.lengthSq() < ptB.lengthSq() ? ptA : ptB;
+  const farPlanet  = ptA.lengthSq() < ptB.lengthSq() ? ptB : ptA;
+  const labelPos   = nearPlanet.clone().lerp(farPlanet, 0.28);
   measSprite.position.set(labelPos.x, labelPos.y+1.1, labelPos.z);
   measSprite.visible=true;
   measSprite.scale.set(3.2,0.82,1);
@@ -751,8 +754,8 @@ function renderVRPanel(){
   // Measure distance
   drawLabel('MEASURE DISTANCE',518);
   const measLabel = vrMeasureMode
-    ? (vrMeasurePtA ? '◎ POINT B — POINT & TRIGGER' : '◎ POINT A — POINT & TRIGGER')
-    : '◎ POINT & TRIGGER TO MEASURE';
+    ? (vrMeasurePtA ? '◎ CLICK SECOND POINT' : '◎ CLICK FIRST POINT')
+    : '◎ CLICK TWO POINTS TO MEASURE';
   drawBtn({x:8,y:530,w:496,h:54}, measLabel, vrMeasureMode, '#b090ff');
 
   // Result or hint
@@ -766,7 +769,7 @@ function renderVRPanel(){
   } else if(vrMeasurePtA&&!vrMeasurePtB){
     ctx.fillStyle='rgba(176,144,255,0.7)';ctx.font='bold 18px "Rajdhani",sans-serif';
     ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillText('POINT A SET — AIM AT SECOND POINT',W/2,624);
+    ctx.fillText('FIRST POINT SET — CLICK SECOND',W/2,624);
   }
 
   drawDivider(666);
@@ -776,20 +779,14 @@ function renderVRPanel(){
 
   drawDivider(730);
 
-  // Grip hint — large, prominent
-  ctx.fillStyle='rgba(255,51,136,0.85)';
-  ctx.font='bold 22px "Rajdhani",sans-serif';
+  // Grip hint — large, prominent, no gap, no status text below
+  ctx.fillStyle='rgba(255,51,136,0.9)';
+  ctx.font='bold 24px "Rajdhani",sans-serif';
   ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.fillText('GRIP BUTTON — HOLD & THROW MOON',W/2,762);
-  ctx.fillStyle='rgba(255,51,136,0.5)';
-  ctx.font='15px "Share Tech Mono",monospace';
-  ctx.fillText('move hand to aim · release to launch',W/2,790);
-
-  if(tmState){
-    ctx.fillStyle=tmState.held?'rgba(255,51,136,0.9)':'rgba(255,180,51,0.9)';
-    ctx.font='bold 18px "Rajdhani",sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillText(tmState.held?'● HOLDING MOON':'● MOON IN FLIGHT',W/2,840);
-  }
+  ctx.fillText('GRIP — HOLD & THROW MOON',W/2,758);
+  ctx.fillStyle='rgba(255,51,136,0.55)';
+  ctx.font='bold 18px "Rajdhani",sans-serif';
+  ctx.fillText('move hand to aim  ·  release to launch',W/2,790);
 
   vrPanelTex.needsUpdate=true;
 }
