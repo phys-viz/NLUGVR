@@ -571,7 +571,7 @@ function updateMeasureReadout(ptA,ptB){
   // Planet is at origin — whichever point is closer to origin is the "planet side"
   const nearPlanet = ptA.lengthSq() < ptB.lengthSq() ? ptA : ptB;
   const farPlanet  = ptA.lengthSq() < ptB.lengthSq() ? ptB : ptA;
-  const labelPos   = nearPlanet.clone().lerp(farPlanet, 0.28);
+  const labelPos   = nearPlanet.clone().lerp(farPlanet, 0.65);
   measSprite.position.set(labelPos.x, labelPos.y+1.1, labelPos.z);
   measSprite.visible=true;
   measSprite.scale.set(3.2,0.82,1);
