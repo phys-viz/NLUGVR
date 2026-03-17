@@ -563,6 +563,87 @@ orreryGroup.add(touchGlowMesh);
 let touchCooldown = 0;
 const _ctrlLocalPos = new THREE.Vector3();
 
+// ── Hand cursors — one per controller ──
+// A palm sphere + 4 fingertip spheres + thumb, all in orrery local space.
+// Scaled so they read as a hand inside the miniature orrery.
+const HAND_PALM_R    = 0.18;
+const HAND_FINGER_R  = 0.10;
+const HAND_COLOR     = 0xd0c8ff;
+const HAND_OPACITY   = 0.72;
+
+// Finger offsets in controller-local space (before orrery transform)
+// x=right, y=up, z=back — these produce a loose open-hand shape
+const FINGER_OFFSETS = [
+  new THREE.Vector3(-0.22, 0.28, 0.05),  // index
+  new THREE.Vector3(-0.06, 0.34, 0.02),  // middle
+  new THREE.Vector3( 0.10, 0.30, 0.02),  // ring
+  new THREE.Vector3( 0.24, 0.22, 0.05),  // pinky
+  new THREE.Vector3(-0.30, 0.08, 0.08),  // thumb
+];
+
+function makeHandCursor(){
+  const group = new THREE.Group();
+  group.visible = false;
+
+  const mat = new THREE.MeshBasicMaterial({
+    color: HAND_COLOR, transparent: true, opacity: HAND_OPACITY, depthTest: false
+  });
+
+  // Palm
+  const palm = new THREE.Mesh(new THREE.SphereGeometry(HAND_PALM_R, 10, 10), mat.clone());
+  palm.renderOrder = 13;
+  group.add(palm);
+
+  // Fingers
+  FINGER_OFFSETS.forEach(off => {
+    const f = new THREE.Mesh(new THREE.SphereGeometry(HAND_FINGER_R, 8, 8), mat.clone());
+    f.position.copy(off);
+    f.renderOrder = 13;
+    group.add(f);
+  });
+
+  orreryGroup.add(group);
+  return group;
+}
+
+const handCursors = [makeHandCursor(), makeHandCursor()];
+
+// Temp objects for hand positioning
+const _handCtrlWorld  = new THREE.Vector3();
+const _handCtrlQuat   = new THREE.Quaternion();
+const _handLocalPos   = new THREE.Vector3();
+const _handLocalQuat  = new THREE.Quaternion();
+const _handInvMat     = new THREE.Matrix4();
+
+function updateHandCursors(){
+  if(!vrActive){ handCursors.forEach(h=>h.visible=false); return; }
+
+  // Inverse of orreryGroup world matrix → transforms world → orrery local
+  _handInvMat.copy(orreryGroup.matrixWorld).invert();
+
+  controllers.forEach((ctrl, i) => {
+    const hand = handCursors[i];
+    // Only show for the non-grip hand (grip hand has thrown moon)
+    if(tmState?.held && tmState.ctrlIdx === i){
+      hand.visible = false;
+      return;
+    }
+    ctrl.getWorldPosition(_handCtrlWorld);
+    ctrl.getWorldQuaternion(_handCtrlQuat);
+
+    // Transform position into orrery local space
+    _handLocalPos.copy(_handCtrlWorld).applyMatrix4(_handInvMat);
+
+    // Transform orientation — extract rotation portion of inverse matrix
+    _handLocalQuat.setFromRotationMatrix(_handInvMat);
+    _handLocalQuat.multiply(_handCtrlQuat);
+
+    hand.position.copy(_handLocalPos);
+    hand.quaternion.copy(_handLocalQuat);
+    hand.visible = true;
+  });
+}
+
 function updateMeasureReadout(ptA,ptB){
   const dist=ptA.distanceTo(ptB);
   const scale=getScale(currentSys);
@@ -1387,6 +1468,7 @@ function onVRSessionStart(){
 function onVRSessionEnd(){
   vrActive=false;tmState=null;
   thrownMoonMesh.visible=false;thrownHaloMesh.visible=false;readoutSprite.visible=false;
+  handCursors.forEach(h=>h.visible=false);
   clearVRMeasure();
   orreryGroup.scale.setScalar(1);orreryGroup.position.set(0,0,0);orreryGroup.rotation.x=0;
   spaceEnv.visible=false;vrPanelGroup.visible=false;
@@ -1478,6 +1560,7 @@ function animate(ts){
     updateThrownMoon(dt_real,sim_dt);
     updateSparks(sim_dt);
     updateTouchMeasurement(dt_real);
+    updateHandCursors();
     updateControllerHighlight();
     billboardVRPanel();
     updateSpriteOcclusion();
