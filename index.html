@@ -762,10 +762,10 @@ function renderVRPanel(){
   if(vrMeasureResult){
     ctx.fillStyle='rgba(8,8,24,0.85)';ctx.beginPath();ctx.roundRect(8,592,496,64,8);ctx.fill();
     ctx.strokeStyle='rgba(176,144,255,0.5)';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(8,592,496,64,8);ctx.stroke();
-    ctx.fillStyle='#c0a8ff';ctx.font='bold 24px "Rajdhani",sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillStyle='#c0a8ff';ctx.font='bold 32px "Rajdhani",sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.fillText(vrMeasureResult.diam+' '+vrMeasureResult.sysShort+' diameters',W/2,612);
-    ctx.fillStyle='#8ab8d8';ctx.font='bold 24px "Rajdhani",sans-serif';
-    ctx.fillText('≈ '+vrMeasureResult.km+',000 km',W/2,640);
+    ctx.fillStyle='#8ab8d8';ctx.font='bold 32px "Rajdhani",sans-serif';
+    ctx.fillText('≈ '+vrMeasureResult.km+',000 km',W/2,643);
   } else if(vrMeasurePtA&&!vrMeasurePtB){
     ctx.fillStyle='rgba(176,144,255,0.7)';ctx.font='bold 18px "Rajdhani",sans-serif';
     ctx.textAlign='center';ctx.textBaseline='middle';
@@ -781,12 +781,9 @@ function renderVRPanel(){
 
   // Grip hint — large, prominent, no gap, no status text below
   ctx.fillStyle='rgba(255,51,136,0.9)';
-  ctx.font='bold 24px "Rajdhani",sans-serif';
+  ctx.font='bold 30px "Rajdhani",sans-serif';
   ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.fillText('GRIP — HOLD & THROW MOON',W/2,758);
-  ctx.fillStyle='rgba(255,51,136,0.55)';
-  ctx.font='bold 18px "Rajdhani",sans-serif';
-  ctx.fillText('move hand to aim  ·  release to launch',W/2,790);
+  ctx.fillText('GRIP — HOLD & THROW MOON',W/2,766);
 
   vrPanelTex.needsUpdate=true;
 }
