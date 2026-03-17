@@ -580,8 +580,8 @@ function updateMeasureReadout(ptA,ptB){
   // Planet is at origin — whichever point is closer to origin is the "planet side"
   const nearPlanet = ptA.lengthSq() < ptB.lengthSq() ? ptA : ptB;
   const farPlanet  = ptA.lengthSq() < ptB.lengthSq() ? ptB : ptA;
-  const labelPos   = nearPlanet.clone().lerp(farPlanet, 0.65);
-  measSprite.position.set(labelPos.x, labelPos.y+1.1, labelPos.z);
+  const labelPos = nearPlanet.clone().lerp(farPlanet, 0.82);
+  measSprite.position.set(labelPos.x, labelPos.y-0.5, labelPos.z);
   measSprite.visible=true;
   measSprite.scale.set(3.2,0.82,1);
 
@@ -818,31 +818,56 @@ const _occHit = new THREE.Vector3();
 function updateSpriteOcclusion(){
   if(!vrActive) return;
   const sys = SYSTEMS[currentSys];
-  _occSphere.radius = sys.dispRadius;
-  renderer.xr.getCamera(camera).getWorldPosition(_occCamLocal);
-  orreryGroup.worldToLocal(_occCamLocal);
 
-  // Moon name labels — fully hide when behind planet
+  // Everything in world space — avoids local-space transform errors
+  // when orreryGroup has both scale and rotation applied
+  const xrCam = renderer.xr.getCamera(camera);
+  xrCam.getWorldPosition(_occCamLocal); // reuse vec, now holds cam world pos
+
+  // Planet center in world space = orreryGroup.position (planet is at local origin)
+  const planetWorld = orreryGroup.position;
+  // Planet radius in world space = dispRadius * VR_SCALE
+  const planetRadiusWorld = sys.dispRadius * VR_SCALE;
+
+  // Camera → planet vector
+  const camToPlanet = planetWorld.clone().sub(_occCamLocal);
+  const distCamToPlanet = camToPlanet.length();
+  const axis = camToPlanet.clone().normalize();
+
   moonMeshes.forEach((mesh, i) => {
-    if(!moonSprites[i] || !moonSprites[i].visible) return;
-    _occMoonLocal.copy(mesh.position);
-    const dir = _occMoonLocal.clone().sub(_occCamLocal).normalize();
-    _occRay.set(_occCamLocal, dir);
-    const distToMoon = _occCamLocal.distanceTo(_occMoonLocal);
-    const hit = _occRay.intersectSphere(_occSphere, _occHit);
-    moonSprites[i].material.opacity =
-      (hit && _occCamLocal.distanceTo(_occHit) < distToMoon - 0.05) ? 0 : 0.92;
+    if(!moonSprites[i]) return;
+
+    // Moon world position
+    mesh.getWorldPosition(_occMoonLocal);
+    const camToMoon = _occMoonLocal.clone().sub(_occCamLocal);
+    const distCamToMoon = camToMoon.length();
+
+    let occluded = false;
+    if(distCamToMoon > distCamToPlanet - planetRadiusWorld){
+      // Moon is at or past the planet — check if within planet's angular disc
+      const alongAxis = camToMoon.dot(axis);
+      const perpDist  = camToMoon.clone()
+        .sub(axis.clone().multiplyScalar(alongAxis)).length();
+      // Scale planet radius to moon's depth for correct angular comparison
+      const scaledR = planetRadiusWorld * (alongAxis / distCamToPlanet);
+      occluded = perpDist < scaledR;
+    }
+
+    moonSprites[i].material.opacity = occluded ? 0 : 0.92;
   });
 
-  // Measure readout sprite — fade to 35% when behind planet, stay readable
+  // Measure sprite — fade to 35% when behind planet
   if(measSprite.visible){
-    const spriteLocal = measSprite.position.clone();
-    const dir = spriteLocal.clone().sub(_occCamLocal).normalize();
-    _occRay.set(_occCamLocal, dir);
-    const distToSprite = _occCamLocal.distanceTo(spriteLocal);
-    const hit = _occRay.intersectSphere(_occSphere, _occHit);
-    measSprite.material.opacity =
-      (hit && _occCamLocal.distanceTo(_occHit) < distToSprite - 0.05) ? 0.35 : 1.0;
+    measSprite.getWorldPosition(_occHit); // reuse vec for sprite world pos
+    const camToSprite = _occHit.clone().sub(_occCamLocal);
+    const distCamToSprite = camToSprite.length();
+    const alongAxis = camToSprite.dot(axis);
+    const perpDist  = camToSprite.clone()
+      .sub(axis.clone().multiplyScalar(alongAxis)).length();
+    const scaledR = planetRadiusWorld * (alongAxis / distCamToPlanet);
+    const occluded = distCamToSprite > distCamToPlanet - planetRadiusWorld
+                  && perpDist < scaledR;
+    measSprite.material.opacity = occluded ? 0.35 : 1.0;
   }
 }
 
