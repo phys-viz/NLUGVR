@@ -589,14 +589,13 @@ orreryGroup.add(handSprite);
 // Fingertip is near the top of the emoji — offset sprite down so tip = controller pos
 const HAND_TIP_OFFSET = -0.28;
 
-const _handCtrlWorld = new THREE.Vector3();
-const _handInvMat    = new THREE.Matrix4();
-const _handLocalPos  = new THREE.Vector3();
+const _handRayDir  = new THREE.Vector3();
+const _camRight    = new THREE.Vector3();
+const _camUp       = new THREE.Vector3();
 
 function updateHandCursors(){
   if(!vrActive){ handSprite.visible=false; return; }
 
-  // Use controller 0 unless it's the grip hand, then try controller 1
   let ctrlIdx = 0;
   if(tmState?.held && tmState.ctrlIdx===0) ctrlIdx=1;
   if(ctrlIdx >= controllers.length){ handSprite.visible=false; return; }
@@ -608,9 +607,30 @@ function updateHandCursors(){
   _handInvMat.copy(orreryGroup.matrixWorld).invert();
   _handLocalPos.copy(_handCtrlWorld).applyMatrix4(_handInvMat);
 
-  // Shift down so fingertip = controller position
+  // Shift so fingertip = controller position
   handSprite.position.set(_handLocalPos.x, _handLocalPos.y + HAND_TIP_OFFSET, _handLocalPos.z);
   handSprite.visible = true;
+
+  // ── Align finger with controller ray ──
+  // Get controller pointing direction in world space
+  ctrl.getWorldDirection(_handRayDir); // points away from controller tip
+
+  // Get camera basis vectors
+  const xrCam = renderer.xr.getCamera(camera);
+  xrCam.getWorldDirection(_camRight);  // temp — reuse as forward
+  _camUp.set(0,1,0).applyQuaternion(xrCam.quaternion).normalize();
+  _camRight.crossVectors(_camRight, _camUp).normalize(); // cam right = forward × up... 
+
+  // Actually: extract directly from camera matrix
+  _camRight.setFromMatrixColumn(xrCam.matrixWorld, 0).normalize(); // X column = right
+  _camUp.setFromMatrixColumn(xrCam.matrixWorld, 1).normalize();    // Y column = up
+
+  // Project ray direction onto camera plane
+  const dx = _handRayDir.dot(_camRight);
+  const dy = _handRayDir.dot(_camUp);
+
+  // Angle from camera-up toward camera-right = rotation of sprite
+  handSprite.material.rotation = Math.atan2(dx, dy);
 }
 
 function updateMeasureReadout(ptA,ptB){
