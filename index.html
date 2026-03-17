@@ -575,16 +575,7 @@ function updateMeasureReadout(ptA,ptB){
   ctx.fillText('≈ '+km+',000 km', W/2, 68);
 
   measTex.needsUpdate=true;
-
-  // Always place label near the planet-side point regardless of click order
-  // Planet is at origin — whichever point is closer to origin is the "planet side"
-  const nearPlanet = ptA.lengthSq() < ptB.lengthSq() ? ptA : ptB;
-  const farPlanet  = ptA.lengthSq() < ptB.lengthSq() ? ptB : ptA;
-  const labelPos = nearPlanet.clone().lerp(farPlanet, 0.82);
-  measSprite.position.set(labelPos.x, labelPos.y-0.5, labelPos.z);
-  measSprite.visible=true;
-  measSprite.scale.set(3.2,0.82,1);
-
+  // Result shows on panel only — no floating 3D label
   renderVRPanel();
 }
 
@@ -855,20 +846,6 @@ function updateSpriteOcclusion(){
 
     moonSprites[i].material.opacity = occluded ? 0 : 0.92;
   });
-
-  // Measure sprite — fade to 35% when behind planet
-  if(measSprite.visible){
-    measSprite.getWorldPosition(_occHit); // reuse vec for sprite world pos
-    const camToSprite = _occHit.clone().sub(_occCamLocal);
-    const distCamToSprite = camToSprite.length();
-    const alongAxis = camToSprite.dot(axis);
-    const perpDist  = camToSprite.clone()
-      .sub(axis.clone().multiplyScalar(alongAxis)).length();
-    const scaledR = planetRadiusWorld * (alongAxis / distCamToPlanet);
-    const occluded = distCamToSprite > distCamToPlanet - planetRadiusWorld
-                  && perpDist < scaledR;
-    measSprite.material.opacity = occluded ? 0.35 : 1.0;
-  }
 }
 
 function setupControllers(){
