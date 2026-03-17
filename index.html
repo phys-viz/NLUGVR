@@ -563,85 +563,127 @@ orreryGroup.add(touchGlowMesh);
 let touchCooldown = 0;
 const _ctrlLocalPos = new THREE.Vector3();
 
-// ── Hand cursors — one per controller ──
-// A palm sphere + 4 fingertip spheres + thumb, all in orrery local space.
-// Scaled so they read as a hand inside the miniature orrery.
-const HAND_PALM_R    = 0.18;
-const HAND_FINGER_R  = 0.10;
-const HAND_COLOR     = 0xd0c8ff;
-const HAND_OPACITY   = 0.72;
+// ── Pointing hand sprite ──
+function drawPointingHand(){
+  const W=160, H=240;
+  const cv = document.createElement('canvas');
+  cv.width=W; cv.height=H;
+  const ctx = cv.getContext('2d');
 
-// Finger offsets in controller-local space (before orrery transform)
-// x=right, y=up, z=back — these produce a loose open-hand shape
-const FINGER_OFFSETS = [
-  new THREE.Vector3(-0.22, 0.28, 0.05),  // index
-  new THREE.Vector3(-0.06, 0.34, 0.02),  // middle
-  new THREE.Vector3( 0.10, 0.30, 0.02),  // ring
-  new THREE.Vector3( 0.24, 0.22, 0.05),  // pinky
-  new THREE.Vector3(-0.30, 0.08, 0.08),  // thumb
-];
+  // Skin tone fill + outline
+  const skinFill    = '#c68642';
+  const skinShadow  = '#a0622a';
+  const skinLight   = '#e0a060';
+  const outlineCol  = '#7a4010';
 
-function makeHandCursor(){
-  const group = new THREE.Group();
-  group.visible = false;
+  ctx.lineCap='round'; ctx.lineJoin='round';
 
-  const mat = new THREE.MeshBasicMaterial({
-    color: HAND_COLOR, transparent: true, opacity: HAND_OPACITY, depthTest: false
-  });
+  // ── Curled fingers (ring, middle, pinky) — bumps on right side ──
+  ctx.fillStyle=skinShadow;
+  // Middle finger knuckle bump
+  ctx.beginPath();ctx.ellipse(104,148,18,14,0.3,0,Math.PI*2);ctx.fill();
+  // Ring finger
+  ctx.beginPath();ctx.ellipse(118,162,14,11,0.4,0,Math.PI*2);ctx.fill();
+  // Pinky
+  ctx.beginPath();ctx.ellipse(126,178,11,9,0.5,0,Math.PI*2);ctx.fill();
 
-  // Palm
-  const palm = new THREE.Mesh(new THREE.SphereGeometry(HAND_PALM_R, 10, 10), mat.clone());
-  palm.renderOrder = 13;
-  group.add(palm);
+  // ── Palm ──
+  ctx.fillStyle=skinFill;
+  ctx.beginPath();
+  ctx.moveTo(52,230);
+  ctx.bezierCurveTo(30,230, 28,200, 32,175);
+  ctx.bezierCurveTo(36,148, 45,138, 58,132);
+  ctx.bezierCurveTo(68,126, 80,128, 88,132);
+  ctx.bezierCurveTo(100,128, 116,130, 122,145);
+  ctx.bezierCurveTo(130,162, 128,185, 120,205);
+  ctx.bezierCurveTo(112,222, 96,230, 52,230);
+  ctx.fill();
 
-  // Fingers
-  FINGER_OFFSETS.forEach(off => {
-    const f = new THREE.Mesh(new THREE.SphereGeometry(HAND_FINGER_R, 8, 8), mat.clone());
-    f.position.copy(off);
-    f.renderOrder = 13;
-    group.add(f);
-  });
+  // ── Thumb ──
+  ctx.fillStyle=skinFill;
+  ctx.beginPath();
+  ctx.moveTo(32,175);
+  ctx.bezierCurveTo(18,165, 10,148, 14,132);
+  ctx.bezierCurveTo(18,116, 34,112, 46,120);
+  ctx.bezierCurveTo(54,126, 58,132, 58,132);
+  ctx.bezierCurveTo(45,138, 36,148, 32,175);
+  ctx.fill();
+  // Thumb highlight
+  ctx.fillStyle=skinLight;
+  ctx.beginPath();ctx.ellipse(26,138,8,14,-0.3,0,Math.PI*2);ctx.fill();
 
-  orreryGroup.add(group);
-  return group;
+  // ── Index finger ──
+  ctx.fillStyle=skinFill;
+  ctx.beginPath();
+  ctx.moveTo(58,132);
+  ctx.bezierCurveTo(52,110, 50,70, 60,30);  // left edge up to tip
+  ctx.bezierCurveTo(66,8,  86,8,  90,30);   // fingertip arc
+  ctx.bezierCurveTo(98,70, 96,110, 88,132); // right edge down
+  ctx.bezierCurveTo(80,128, 68,126, 58,132);
+  ctx.fill();
+
+  // Finger highlight
+  ctx.fillStyle=skinLight;
+  ctx.beginPath();ctx.ellipse(67,75,8,40,0.1,0,Math.PI*2);ctx.fill();
+
+  // Fingernail
+  ctx.fillStyle='#e8c8a8';
+  ctx.beginPath();ctx.ellipse(75,22,9,10,0,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='#c09060';ctx.lineWidth=1;ctx.stroke();
+
+  // Knuckle lines on index
+  ctx.strokeStyle=skinShadow;ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(57,95);ctx.bezierCurveTo(65,92,84,92,90,95);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(59,115);ctx.bezierCurveTo(67,112,82,112,88,115);ctx.stroke();
+
+  // ── Outline ──
+  ctx.strokeStyle=outlineCol;ctx.lineWidth=2.5;
+  ctx.beginPath();
+  ctx.moveTo(58,132);
+  ctx.bezierCurveTo(52,110,50,70,60,30);
+  ctx.bezierCurveTo(66,8,86,8,90,30);
+  ctx.bezierCurveTo(98,70,96,110,88,132);
+  ctx.stroke();
+
+  return new THREE.CanvasTexture(cv);
 }
 
-const handCursors = [makeHandCursor(), makeHandCursor()];
+const handTex = drawPointingHand();
+const handSprite = new THREE.Sprite(
+  new THREE.SpriteMaterial({ map:handTex, transparent:true, depthTest:false, opacity:0.92 })
+);
+// Scale: W/H ratio preserved, ~1.0 world units tall in orrery space
+handSprite.scale.set(1.0*(160/240), 1.0, 1);
+handSprite.renderOrder = 14;
+handSprite.visible = false;
+orreryGroup.add(handSprite);
 
-// Temp objects for hand positioning
-const _handCtrlWorld  = new THREE.Vector3();
-const _handCtrlQuat   = new THREE.Quaternion();
-const _handLocalPos   = new THREE.Vector3();
-const _handLocalQuat  = new THREE.Quaternion();
-const _handInvMat     = new THREE.Matrix4();
+// Offset so fingertip (top of canvas) aligns with controller position
+// Sprite center is at position — fingertip is at top, so shift down half height
+const HAND_TIP_OFFSET = -0.50; // world units downward
+
+const _handCtrlWorld = new THREE.Vector3();
+const _handInvMat    = new THREE.Matrix4();
+const _handLocalPos  = new THREE.Vector3();
 
 function updateHandCursors(){
-  if(!vrActive){ handCursors.forEach(h=>h.visible=false); return; }
+  if(!vrActive){ handSprite.visible=false; return; }
 
-  // Inverse of orreryGroup world matrix → transforms world → orrery local
+  // Use controller 0 unless it's the grip hand, then try controller 1
+  let ctrlIdx = 0;
+  if(tmState?.held && tmState.ctrlIdx===0) ctrlIdx=1;
+  if(ctrlIdx >= controllers.length){ handSprite.visible=false; return; }
+
+  const ctrl = controllers[ctrlIdx];
+  ctrl.getWorldPosition(_handCtrlWorld);
+
+  // Transform to orrery local space
   _handInvMat.copy(orreryGroup.matrixWorld).invert();
+  _handLocalPos.copy(_handCtrlWorld).applyMatrix4(_handInvMat);
 
-  controllers.forEach((ctrl, i) => {
-    const hand = handCursors[i];
-    // Only show for the non-grip hand (grip hand has thrown moon)
-    if(tmState?.held && tmState.ctrlIdx === i){
-      hand.visible = false;
-      return;
-    }
-    ctrl.getWorldPosition(_handCtrlWorld);
-    ctrl.getWorldQuaternion(_handCtrlQuat);
-
-    // Transform position into orrery local space
-    _handLocalPos.copy(_handCtrlWorld).applyMatrix4(_handInvMat);
-
-    // Transform orientation — extract rotation portion of inverse matrix
-    _handLocalQuat.setFromRotationMatrix(_handInvMat);
-    _handLocalQuat.multiply(_handCtrlQuat);
-
-    hand.position.copy(_handLocalPos);
-    hand.quaternion.copy(_handLocalQuat);
-    hand.visible = true;
-  });
+  // Shift down so fingertip = controller position
+  handSprite.position.set(_handLocalPos.x, _handLocalPos.y + HAND_TIP_OFFSET, _handLocalPos.z);
+  handSprite.visible = true;
 }
 
 function updateMeasureReadout(ptA,ptB){
@@ -1468,7 +1510,7 @@ function onVRSessionStart(){
 function onVRSessionEnd(){
   vrActive=false;tmState=null;
   thrownMoonMesh.visible=false;thrownHaloMesh.visible=false;readoutSprite.visible=false;
-  handCursors.forEach(h=>h.visible=false);
+  handSprite.visible=false;
   clearVRMeasure();
   orreryGroup.scale.setScalar(1);orreryGroup.position.set(0,0,0);orreryGroup.rotation.x=0;
   spaceEnv.visible=false;vrPanelGroup.visible=false;
