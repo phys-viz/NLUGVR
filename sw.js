@@ -1,81 +1,53 @@
-// Moon Lab Service Worker
-// Cache version — increment this string whenever you deploy updated files
-const CACHE_NAME = 'moon-lab-v1';
+// Moon Lab — Dev-friendly Service Worker
+// Strategy: NETWORK FIRST, fall back to cache only when offline.
+// Bumping CACHE_VERSION forces a full cache clear on next load.
 
-// Files to cache on install
-// Three.js is fetched from CDN on first load and then cached locally
-const PRECACHE_URLS = [
-  './moon-lab-vr.html',
-  './manifest.json',
-  'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
-];
+const CACHE_VERSION = 'moonlab-v1';
 
-// Optional texture files — cached if present, skipped if not
-const OPTIONAL_URLS = [
-  './jupiter.jpg',
-  './saturn.jpg',
-  './icon-192.png',
-  './icon-512.png'
-];
-
-// ── Install: pre-cache everything ──
-self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(async cache => {
-      // Cache required files — fail loudly if any are missing
-      await cache.addAll(PRECACHE_URLS);
-      // Cache optional files — ignore failures (textures may not exist)
-      await Promise.allSettled(
-        OPTIONAL_URLS.map(url =>
-          fetch(url).then(res => {
-            if (res.ok) return cache.put(url, res);
-          }).catch(() => {})
-        )
-      );
-    })
-  );
-  // Take over immediately without waiting for old SW to unload
-  self.skipWaiting();
+// Install: pre-cache nothing — let runtime caching handle it
+self.addEventListener('install', e => {
+  self.skipWaiting(); // activate immediately, don't wait for old tabs
 });
 
-// ── Activate: delete old caches ──
-self.addEventListener('activate', event => {
-  event.waitUntil(
+// Activate: delete any old caches
+self.addEventListener('activate', e => {
+  e.waitUntil(
     caches.keys().then(keys =>
       Promise.all(
-        keys
-          .filter(key => key !== CACHE_NAME)
-          .map(key => caches.delete(key))
+        keys.filter(k => k !== CACHE_VERSION).map(k => caches.delete(k))
       )
-    ).then(() => self.clients.claim())
+    ).then(() => self.clients.claim()) // take control of all tabs now
   );
 });
 
-// ── Fetch: cache-first, network fallback ──
-self.addEventListener('fetch', event => {
-  // Only handle GET requests
-  if (event.request.method !== 'GET') return;
+// Fetch: always try network first
+self.addEventListener('fetch', e => {
+  // Skip non-GET requests and chrome-extension / cross-origin noise
+  if (e.request.method !== 'GET') return;
 
-  event.respondWith(
-    caches.match(event.request).then(cached => {
-      if (cached) return cached;
-
-      // Not in cache — fetch from network and cache for next time
-      return fetch(event.request).then(response => {
-        // Only cache valid responses
-        if (!response || response.status !== 200 || response.type === 'error') {
-          return response;
+  e.respondWith(
+    fetch(e.request)
+      .then(response => {
+        // Network succeeded — clone into cache for offline fallback
+        if (response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_VERSION).then(cache => cache.put(e.request, clone));
         }
-        const toCache = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(event.request, toCache));
         return response;
-      }).catch(() => {
-        // Network failed and not in cache — return a minimal offline page
-        // for navigation requests only
-        if (event.request.mode === 'navigate') {
-          return caches.match('./moon-lab-vr.html');
-        }
-      });
-    })
+      })
+      .catch(() => {
+        // Network failed — try cache
+        return caches.match(e.request).then(cached => {
+          if (cached) return cached;
+          // Nothing cached either — return a basic offline message for nav requests
+          if (e.request.mode === 'navigate') {
+            return new Response(
+              '<h1 style="font-family:monospace;color:#ffd54f;background:#080c12;margin:0;padding:40px">Moon Lab is offline — connect and reload</h1>',
+              { headers: { 'Content-Type': 'text/html' } }
+            );
+          }
+          return Response.error();
+        });
+      })
   );
 });
